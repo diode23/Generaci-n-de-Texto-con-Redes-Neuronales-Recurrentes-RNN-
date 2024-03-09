@@ -1,0 +1,35 @@
+# Importar las bibliotecas necesarias
+import tensorflow as tf  # Biblioteca de Deep Learning TensorFlow
+from tensorflow.keras.layers import Embedding, LSTM, Dense  # Capas para construir modelos de RNN
+
+# Definir el modelo de Red Neuronal Recurrente (RNN) para generación de texto
+model = tf.keras.Sequential([
+    Embedding(input_dim=vocab_size, output_dim=embedding_dim, input_length=max_seq_length),
+    LSTM(units=128, return_sequences=True),
+    LSTM(units=128),
+    Dense(vocab_size, activation='softmax')
+])
+
+# Compilar el modelo con función de pérdida y optimizador
+model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
+
+# Entrenar el modelo con datos de texto secuencial
+model.fit(X_train, y_train, epochs=10, batch_size=64)
+
+# Generar texto utilizando el modelo entrenado
+def generate_text(seed_text, next_words):
+    for _ in range(next_words):
+        token_list = tokenizer.texts_to_sequences([seed_text])[0]
+        token_list = pad_sequences([token_list], maxlen=max_seq_length-1, padding='pre')
+        predicted = model.predict_classes(token_list, verbose=0)
+        output_word = ""
+        for word, index in tokenizer.word_index.items():
+            if index == predicted:
+                output_word = word
+                break
+        seed_text += " " + output_word
+    return seed_text
+
+# Ejemplo de generación de texto a partir de una semilla
+generated_text = generate_text("Once upon a time", 20)
+print(generated_text)
