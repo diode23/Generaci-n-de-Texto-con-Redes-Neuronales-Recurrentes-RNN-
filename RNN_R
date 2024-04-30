@@ -1,0 +1,89 @@
+# Cargar las bibliotecas necesarias
+library(tensorflow)
+library(keras)
+
+# Función para cargar y preprocesar los datos de entrenamiento
+load_and_preprocess_data <- function() {
+  # Cargar los datos de texto
+  text <- readLines("ruta/al/archivo/de/texto.txt")
+  
+  # Tokenizar el texto
+  tokenizer <- text_tokenizer(num_words = 10000)
+  tokenizer$fit_on_texts(text)
+  sequences <- tokenizer$texts_to_sequences(text)
+  
+  # Obtener la longitud máxima de las secuencias
+  max_length <- max(sapply(sequences, length))
+  
+  # Rellenar las secuencias a la longitud máxima
+  X <- pad_sequences(sequences, maxlen = max_length)
+  
+  # Convertir los índices de tokens a caracteres
+  char_indices <- tokenizer$word_index
+  indices_char <- names(char_indices)
+  
+  return(list(X = X, char_indices = char_indices, indices_char = indices_char))
+}
+
+# Función para construir el modelo de RNN
+build_rnn_model <- function(input_dim, output_dim, hidden_units = 128, num_layers = 2) {
+  model <- keras_model_sequential()
+  model %>%
+    layer_embedding(input_dim = input_dim, output_dim = hidden_units) %>%
+    layer_lstm(units = hidden_units, return_sequences = num_layers > 1)
+  
+  if (num_layers > 1) {
+    for (i in 2:num_layers) {
+      model %>% layer_lstm(units = hidden_units, return_sequences = i < num_layers)
+    }
+  }
+  
+  model %>%
+    layer_dense(units = output_dim, activation = "softmax")
+  
+  return(model)
+}
+
+# Función para entrenar el modelo
+train_rnn_model <- function(X, y, batch_size = 128, epochs = 50, validation_split = 0.2) {
+  model <- build_rnn_model(input_dim = ncol(X), output_dim = ncol(y))
+  model %>% compile(
+    optimizer = "adam",
+    loss = "categorical_crossentropy",
+    metrics = "accuracy"
+  )
+  
+  history <- model %>% fit(
+    X, y,
+    batch_size = batch_size,
+    epochs = epochs,
+    validation_split = validation_split
+  )
+  
+  return(list(model = model, history = history))
+}
+
+# Función para generar texto usando el modelo entrenado
+generate_text <- function(model, tokenizer, seed_text, max_length, diversity = 1.0) {
+  char_indices <- tokenizer$word_index
+  indices_char <- names(char_indices)
+  
+  # Convertir el texto de inicio a una secuencia de índices
+  input_seq <- sapply(strsplit(seed_text, "")[[1]], function(x) char_indices[[x]])
+  input_seq <- matrix(input_seq, nrow = 1)
+  
+  # Generar texto
+  generated_text <- seed_text
+  for (i in 1:max_length) {
+    preds <- model %>% predict(input_seq)
+    next_index <- sample(length(indices_char), 1, prob = exp(preds / diversity) / sum(exp(preds / diversity)))
+    next_char <- indices_char[next_index]
+    generated_text <- paste0(generated_text, next_char)
+    
+    # Actualizar la secuencia de entrada
+    input_seq <- rbind(input_seq, next_index)
+    input_seq <- input_seq[2:nrow(input_seq), ]
+  }
+  
+  return(generated_text)
+}
